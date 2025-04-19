@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Convertidor PDF ↔ JPG</title>
+  <style>
+    body {
+      font-family: Tahoma, sans-serif;
+      background: linear-gradient(to right, #ff4e50, #f9d423);
+      margin: 0;
+      padding: 20px;
+      text-align: center;
+      color: #000;
+    }
+    h1 {
+      font-weight: bold;
+      margin-bottom: 20px;
+    }
+    .botones-superiores {
+      display: flex;
+      justify-content: center;
+      gap: 20px;
+      margin-bottom: 15px;
+    }
+    .botones-secundarios {
+      margin-top: 20px;
+    }
+    button {
+      font-weight: bold;
+      font-family: Tahoma;
+      padding: 10px 20px;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+    #boton1, #boton2, #boton3 {
+      background-color: #e5322d;
+      color: white;
+    }
+    #boton4 {
+      background-color: #007bff;
+      color: white;
+    }
+    #boton5 {
+      background-color: #28a745;
+      color: white;
+    }
+    .miniaturas {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 15px;
+    }
+    .miniatura {
+      max-width: 200px;
+      border: 2px solid #000;
+      padding: 10px;
+      background: white;
+      border-radius: 10px;
+    }
+    .miniatura img {
+      width: 100%;
+      height: auto;
+      border-radius: 6px;
+    }
+    .progreso {
+      background: #ddd;
+      border-radius: 5px;
+      overflow: hidden;
+      margin-top: 5px;
+      height: 10px;
+    }
+    .progreso-barra {
+      height: 10px;
+      background-color: #28a745;
+      width: 0%;
+    }
+    @media (max-width: 600px) {
+      .miniaturas {
+        flex-direction: column;
+        align-items: center;
+      }
+      .botones-superiores {
+        flex-direction: column;
+      }
+    }
+  </style>
+</head>
+<body>
+  <h1>Convertidor PDF ↔ JPG</h1>
+
+  <!-- Botones de modo en una sola línea -->
+  <div class="botones-superiores">
+    <button id="boton1" onclick="seleccionarModo('pdf')">PDF a JPG</button>
+    <button id="boton2" onclick="seleccionarModo('jpg')">JPG a PDF</button>
+  </div>
+
+  <!-- Botón de carga -->
+  <div class="botones">
+    <input type="file" id="archivoInput" accept=".pdf" style="display:none" multiple onchange="cargarPDF()" />
+    <button id="boton3" style="display:none" onclick="document.getElementById('archivoInput').click()">Cargar Documento</button>
+  </div>
+
+  <!-- Miniaturas -->
+  <div class="miniaturas" id="vistaMiniaturas"></div>
+
+  <!-- Botones debajo de miniaturas -->
+  <div class="botones-secundarios">
+    <button id="boton4" style="display:none" onclick="convertirPDFaJPG()">Convertir</button>
+    <button id="boton5" style="display:none" onclick="descargarImagenes()">Descargar</button>
+  </div>
+
+  <!-- Librerías -->
+  <script src="libs/pdf.min.js"></script>
+<script>
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'libs/pdf.worker.min.js';
+</script>
+<script src="libs/jspdf.umd.min.js"></script>
+<script src="libs/jszip.min.js"></script>
+<script src="libs/FileSaver.min.js"></script>
+
+
+  <script>
+    let imagenesGeneradas = [];
+    let modoSeleccionado = null;
+
+    function seleccionarModo(modo) {
+      modoSeleccionado = modo;
+      if (modo === 'pdf') {
+        document.getElementById('archivoInput').accept = '.pdf';
+        document.getElementById('boton2').style.display = 'none';
+      } else {
+        document.getElementById('archivoInput').accept = 'image/jpeg,image/png';
+        document.getElementById('boton1').style.display = 'none';
+      }
+      document.getElementById('boton3').style.display = 'inline-block';
+    }
+
+    async function cargarPDF() {
+      const files = Array.from(document.getElementById('archivoInput').files);
+      if (!files.length) return;
+
+      document.getElementById('boton1').style.display = 'none';
+      document.getElementById('boton2').style.display = 'none';
+      document.getElementById('boton3').style.display = 'none';
+      document.getElementById('boton4').style.display = 'inline-block';
+
+      const miniaturas = document.getElementById('vistaMiniaturas');
+      miniaturas.innerHTML = '';
+      imagenesGeneradas = [];
+
+      if (modoSeleccionado === 'pdf') {
+        const reader = new FileReader();
+        reader.onload = async function () {
+          const typedarray = new Uint8Array(this.result);
+          const pdf = await pdfjsLib.getDocument({ data: typedarray }).promise;
+          for (let i = 0; i < pdf.numPages; i++) {
+            const page = await pdf.getPage(i + 1);
+            const viewport = page.getViewport({ scale: 2 });
+            const canvas = document.createElement("canvas");
+            const context = canvas.getContext("2d");
+            canvas.width = viewport.width;
+            canvas.height = viewport.height;
+            await page.render({ canvasContext: context, viewport }).promise;
+
+            const imgData = canvas.toDataURL("image/jpeg");
+            imagenesGeneradas.push(imgData);
+
+            const div = document.createElement("div");
+            div.className = "miniatura";
+            div.innerHTML = `
+              <img src="${imgData}" alt="Página ${i + 1}" />
+              <div class="progreso"><div class="progreso-barra" style="width: 100%;"></div></div>
+              <p>100%</p>
+            `;
+            miniaturas.appendChild(div);
+          }
+        };
+        reader.readAsArrayBuffer(files[0]);
+      } else {
+        for (let i = 0; i < files.length; i++) {
+          const file = files[i];
+          const reader = new FileReader();
+          reader.onload = function (e) {
+            const imgSrc = e.target.result;
+            imagenesGeneradas.push(imgSrc);
+            const div = document.createElement("div");
+            div.className = "miniatura";
+            div.innerHTML = `
+              <img src="${imgSrc}" alt="Imagen ${i + 1}" />
+              <div class="progreso"><div class="progreso-barra" style="width: 100%;"></div></div>
+              <p>100%</p>
+            `;
+            miniaturas.appendChild(div);
+          };
+          reader.readAsDataURL(file);
+        }
+      }
+    }
+
+    function convertirPDFaJPG() {
+      document.getElementById('boton4').style.display = 'none';
+      document.getElementById('boton5').style.display = 'inline-block';
+    }
+    function descargarImagenes() {
+  if (modoSeleccionado === 'pdf') {
+    if (imagenesGeneradas.length === 1) {
+      const a = document.createElement("a");
+      a.href = imagenesGeneradas[0];
+      a.download = "pagina.jpg";
+      a.click();
+    } else {
+      const zip = new JSZip();
+      imagenesGeneradas.forEach((img, i) => {
+        zip.file(`pagina${i + 1}.jpg`, img.split(',')[1], { base64: true });
+      });
+      zip.generateAsync({ type: "blob" }).then(content => {
+        saveAs(content, "imagenes.zip");
+      });
+    }
+  } else {
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF();
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+
+    if (imagenesGeneradas.length === 2) {
+      // Mostrar dos imágenes en una sola hoja
+      pdf.addImage(imagenesGeneradas[0], 'JPEG', 10, 10, pageWidth - 20, (pageHeight - 30) / 2);
+      pdf.addImage(imagenesGeneradas[1], 'JPEG', 10, 20 + (pageHeight - 30) / 2, pageWidth - 20, (pageHeight - 30) / 2);
+    } else {
+      // Una imagen por página (como ya estaba)
+      imagenesGeneradas.forEach((imgData, i) => {
+        if (i > 0) pdf.addPage();
+        pdf.addImage(imgData, 'JPEG', 10, 10, pageWidth - 20, 0);
+      });
+    }
+
+    pdf.save("documento.pdf");
+  }
+}
+
+  </script>
+</body>
+</html>
